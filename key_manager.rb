@@ -1,8 +1,9 @@
+require "PStore"
 require "securerandom"
 require 'thread'
 
 class KeyManager # CLASS for Managing/Manipulating Keys
-	attr_reader :available_keys, :blocked_keys
+	attr_accessor :available_keys, :blocked_keys
 
 	def initialize
 		@database = PStore.new('keys.pstore')
@@ -20,18 +21,17 @@ class KeyManager # CLASS for Managing/Manipulating Keys
 		end
 	end
 
-	def generate_random_key(num) # Generate random keys
+	def generate_random_keys(num) # Generate random keys
 		if num.is_a? Integer
 			random_keys = []
 			num.times {
 				random_keys.push(SecureRandom.uuid)
 			}
-			result = save_key(random_keys)
-			result
+			random_keys
 		end
 	end
 
-	def save_key(keys) # API: SAVE THE GENERATED KEY
+	def save_keys(keys) # API: SAVE THE GENERATED KEY
 		keys.each { |key|
 			key_hash = {key: key}
 			@database.transaction do
@@ -71,7 +71,8 @@ class KeyManager # CLASS for Managing/Manipulating Keys
 		unblocked_key = "", result = false
 		exec_db_operation do
 			unblocked_key = @database[:blocked_keys].delete(key) if !@database[:blocked_keys].nil? #Delete the key from block HASH
-			if !unblocked_key.nil? && !unblocked_key
+
+			if !unblocked_key.nil? && unblocked_key
 			 	@database[:keys].push({key: key}) # PUT it in available keys again if key found in block Hash
 				result = true
 			end
@@ -100,10 +101,16 @@ class KeyManager # CLASS for Managing/Manipulating Keys
 	end
 
 	def make_it_alive(key) # API: MAKE THE KEY ALIVE FOR MORE 5 MINUTE
-		@mutex.synchronize { 
-			@powerup_key[key] = Time.now
+		result = true
+		@mutex.synchronize {
+			if !@powerup_key[key].nil?
+				@powerup_key[key] = Time.now
+			else
+				result = false
+			end
 		}
 		delete_key_timeout(key)
+		result
 	end
 
 	def unblock_timeout(key) # METHOD: RELEASE "BLOCKED KEY" AFTER 60 SECOND OF ALLOCATION
@@ -113,7 +120,7 @@ class KeyManager # CLASS for Managing/Manipulating Keys
 	end
 
 	def delete_key_timeout(key) # METHOD: DELETE KEY AFTER 5 MINUTE, IF NOT KEPT ALIVE
-		exec_thread(90) { |seconds|
+		exec_thread(20) { |seconds|
 			@mutex.synchronize {
 				if Time.now - @powerup_key[key] >= seconds
 		    	delete_key?(key)

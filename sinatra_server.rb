@@ -1,6 +1,5 @@
 require "sinatra" #RUBY GEMS
 require "json"
-require "PStore"
 
 require "./key_manager" # CUSTOM code FOR MANAGING KEYS
 
@@ -13,8 +12,9 @@ end
 
 get '/generate-keys/:num' do |number|
 	STDERR.puts "Number : #{number}"
-	key_hash = keys_manager.generate_random_key(number.to_i)
-	key_hash.to_json
+	key_hash = keys_manager.generate_random_keys(number.to_i)
+	response = keys_manager.save_keys(key_hash)
+	response.to_json
 end
 
 get '/assign-key/' do
@@ -23,7 +23,7 @@ get '/assign-key/' do
 		response = use_key.to_json
 	else
 		status 404
-		"Keys are not available"
+		"No Key is available right now!"
 	end
 end
 
@@ -44,8 +44,10 @@ end
 get '/keepalive-key/:key' do |key|
 	if !key.nil? 
 		made_alive = keys_manager.make_it_alive(key)
-		response = {message: "#{key} : kept alived!"}.to_json
+		response = {message: "#{key} : kept alived!"}.to_json if made_alive
+		response = {message: "Wrong key provided"}.to_json if !made_alive
 	else
-		show_404("Valid Key is not present in the url")
+		status 404
+		"Valid Key is not present in the url"
 	end
 end
